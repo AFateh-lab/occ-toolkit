@@ -5,6 +5,24 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>OCC Toolkit Power v4</title>
 <script>
+/* ---- One chime per alert (2026-10-26, "there is duplicated music in the tool's sound") ----
+   The toolkit plays no audio itself; every sound is the system chime of a desktop notification. The same event could raise
+   two notifications (two detectors, or one re-checked a few seconds later), and each chimed. Every notification now carries
+   a tag (its title), and the same title within 60 s is dropped — one event, one chime. Two toolkit TABS (the Desktop app at
+   127.0.0.1 and the web link) are separate copies and each still alerts: keep one open. */
+(function(){ try{
+  const N = window.Notification; if (typeof N !== 'function' || N.__occOnce) return;
+  const seen = new Map();
+  function Once(title, opt){ opt = Object.assign({}, opt || {}); const key = String(title) + '|' + String(opt.body || '').slice(0, 60);
+    const now = Date.now(); for (const [k, t] of seen) if (now - t > 60000) seen.delete(k);
+    if (seen.has(String(title))){ return { close(){}, addEventListener(){}, onclick: null }; }
+    seen.set(String(title), now); if (!opt.tag) opt.tag = 'occ|' + key.slice(0, 80);
+    return new N(title, opt); }
+  Object.defineProperty(Once, 'permission', { get: () => N.permission });
+  Once.requestPermission = (...a) => N.requestPermission(...a);
+  Once.prototype = N.prototype; Once.__occOnce = true;
+  window.Notification = Once;
+}catch(e){} })();
 /* ---- Where does the time go? (2026-10-13, "the application keeps freezing") ----
    With ?prof=1 (or occ_prof = '1') every timer callback and every requestAnimationFrame is timed, and the ones that
    held the page longest are kept by name in window.__prof — long tasks are logged by the browser too. Costs nothing

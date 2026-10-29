@@ -5996,7 +5996,16 @@ async function sgRun(){
 }
 /* The table is drawn after EVERY coin is read (2026-10-03 02:07, "too much time not viewing — those already scanned,
    start previewing them"): a growing table while the read runs, the full one with its summary line when it is done. */
+/* Live price (2026-10-30, "the prices are not correct — the market is lower, like BTC"): the levels are read on CLOSED
+   candles, but the Price column and every "% away" used that last close — up to 4 hours old (BTC showed 80,849 at 79,200).
+   Each row now uses the live mark when it is under 60 s old, keeps the candle close as pxClose, and the table re-draws
+   every 15 s with the fresh mark. */
+let SG_RAW = null;
+function sgLive(r){ try{ const m = window.__markOf ? window.__markOf(r.sym) : null, at = window.__markAt ? window.__markAt(r.sym) : 0;
+  return (m > 0 && at && Date.now() - at < 60000) ? Object.assign({}, r, { px: m, pxClose: r.px, live: true }) : r; }catch(e){ return r; } }
+setInterval(() => { try{ const b = $('sgBox'); if (!SG_RAW || !b || document.hidden || !b.offsetParent) return; sgRenderRows(SG_RAW, false); }catch(e){} }, 15000);
 function sgRenderRows(rows, done){
+  SG_RAW = rows; rows = rows.map(sgLive);
   const box = $('sgBox'), st = $('sgStatus'), maxD = (+$('sgMax').value || 12) / 100;
   SG_ROWS = rows;      /* kept so "Place these as orders" works on what you can see */
   /* drift needs the whole book, so it is computed once every coin is priced */
@@ -6079,7 +6088,7 @@ function sgRenderRows(rows, done){
               r.slack >= 2 ? '. Oversold — buying crashes lost to holding in 13 of 15 tests.' : ''}</span>`;
       return `<tr>
         <td><b>${r.sym.replace(/USDT$/,'')}</b></td>
-        <td class="num">${fmtP(r.px)}</td>
+        <td class="num" title="${r.live ? 'live price · last closed candle ' + fmtP(r.pxClose) : 'last closed candle — no live price in the last 60 s'}">${fmtP(r.px)}${r.live ? '' : ' <span class="na" style="font-size:10px">close</span>'}</td>
         <td>${split ? '<span class="na">split</span>' : trend ? arrow(trend) + ` <span class="na">${r.brk ? r.brkAge : r.segAge}b</span>` : '<span class="na">—</span>'}</td>
         <td class="num">${r.buys.length ? r.buys.map(z => lvl(z, r.px, 'pos')).join('') : `<span class="na">none within ${(maxD*100).toFixed(0)}%</span>`}</td>
         <td class="num">${r.sells.length ? r.sells.map(z => lvl(z, r.px, 'neg')).join('') : `<span class="na">none within ${(maxD*100).toFixed(0)}%</span>`}</td>

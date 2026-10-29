@@ -5929,7 +5929,7 @@ async function sgRun(){
       };
       const dedup = arr => { const out = [];
         for (const z of arr) if (!out.some(x => Math.abs(x.px - z.px) < atr * 0.5)) out.push(z);
-        return out.slice(0, 3); };
+        return out.slice(0, 8); };   /* 8 kept, 3 shown: when price breaks through the nearest ones the next stay on hand (2026-10-30) */
       /* ---- Where the forced buying and selling sits ----
          liqMap rebuilds the estimated liquidation piles from open-interest changes
          and the top-trader ratio (Binance publishes no liquidation levels, so this
@@ -5974,8 +5974,9 @@ async function sgRun(){
       const all = labLevels(B, pv).filter(z => z.conf <= L && z.conf >= L - 200)
         .map(z => ({ px: z.px, vol: volPct(z.px), ob: isVolPivot(z.conf - pv) }))
         .filter(z => Math.abs(z.px / px - 1) <= maxD);
-      const sells = dedup(all.filter(z => z.px > px * 1.002).sort((a,b) => a.px - b.px)).map(z => mark(z, -1));
-      const buys  = dedup(all.filter(z => z.px < px * 0.998).sort((a,b) => b.px - a.px)).map(z => mark(z,  1));
+      const sellsAll = dedup(all.filter(z => z.px > px * 1.002).sort((a,b) => a.px - b.px)).map(z => mark(z, -1));
+      const buysAll  = dedup(all.filter(z => z.px < px * 0.998).sort((a,b) => b.px - a.px)).map(z => mark(z,  1));
+      const sells = sellsAll.slice(0, 3), buys = buysAll.slice(0, 3), lvAll = buysAll.concat(sellsAll);
       const res = sells[0] ? sells[0].px : null, sup = buys[0] ? buys[0].px : null;
       /* the single heaviest traded price in the window — shown on its own, because
          as a LEVEL this failed thirteen separate tests and must not read as a signal */
@@ -5983,7 +5984,7 @@ async function sgRun(){
       const hvn = vlo + (hvnK + 0.5) * bw;
       /* --- the rule that actually passed: drift from equal weight --- */
       const u = (book.units && book.units[sym]) || 0;
-      rows.push({ sym, px, brk, brkAge, seg, segAge, ma50, rsiV, atHigh, atLow, u, res, sup, buys, sells, atr, hvn,
+      rows.push({ sym, px, brk, brkAge, seg, segAge, ma50, rsiV, atHigh, atLow, u, res, sup, buys, sells, lvAll, atr, hvn,
         stretch: (ma50 != null && ma50 > up ? 1 : 0) + (rsiV != null && rsiV > 70 ? 1 : 0) + (atHigh ? 1 : 0),
         slack:   (ma50 != null && ma50 < -up ? 1 : 0) + (rsiV != null && rsiV < 30 ? 1 : 0) + (atLow ? 1 : 0) });
       try{ sgRenderRows(merged(), false); }catch(e){}   /* what has been read so far, the rest from the previous read */
@@ -6005,7 +6006,7 @@ let SG_RAW = null;
    (2026-10-30, "buy entries higher than the market": BTC's 80,671 / 79,797 / 79,218 stayed under BUY at 78,997, and Auto-place
    would have rested a buy-STOP above the market). Both lists are re-split on the live price, nearest first, three each. */
 function sgSplit(r, px){ const all = [], seen = new Set();
-  (r.buys || []).concat(r.sells || []).forEach(z => { if (z && z.px > 0 && !seen.has(z.px)){ seen.add(z.px); all.push(z); } });
+  (r.lvAll || (r.buys || []).concat(r.sells || [])).forEach(z => { if (z && z.px > 0 && !seen.has(z.px)){ seen.add(z.px); all.push(z); } });
   const buys = all.filter(z => z.px < px).sort((a, b) => b.px - a.px).slice(0, 3), sells = all.filter(z => z.px > px).sort((a, b) => a.px - b.px).slice(0, 3);
   return { buys, sells, sup: buys[0] ? buys[0].px : null, res: sells[0] ? sells[0].px : null }; }
 function sgLive(r){ try{ const m = window.__markOf ? window.__markOf(r.sym) : null, at = window.__markAt ? window.__markAt(r.sym) : 0;

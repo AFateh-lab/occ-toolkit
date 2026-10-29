@@ -41029,7 +41029,12 @@ setTimeout(phantomHedgeFixOnce, 10000);
   var fitZoom=function(){ try{ var root=document.documentElement; root.style.zoom='100%'; var avail=root.clientWidth, need=Math.max(document.body.scrollWidth, avail);
       document.querySelectorAll('#view .wrap, .cmdcard .wrap').forEach(function(w){ var r=w.getBoundingClientRect(); if(r.width>0&&w.scrollWidth>w.clientWidth) need=Math.max(need, w.scrollWidth+(r.left)+24); });
       var z=Math.floor(Math.min(100, avail/need*100)); return Math.max(60, z); }catch(e){ return 100; } };
-  var zoomApply=function(){ var m=zoomGet(), z=m==='auto'?fitZoom():m; try{ document.documentElement.style.zoom=z+'%'; }catch(e){}
+  /* Safari (2026-10-30, "screen fit not good, I cannot see everything"): Safari scales a zoomed page but not the fixed side
+     menu, so the page slid under the menu and both edges were cut. There the page stays at 100% and every wide table
+     scrolls sideways inside its own box instead; the 🔍 button still sets a size by hand. */
+  var isSafari=/^((?!chrome|chromium|crios|android|edg).)*safari/i.test(navigator.userAgent);
+  if(isSafari){ try{ var st=document.createElement('style'); st.textContent='html.occ-safari .wrap,html.occ-safari .cmdcard .wrap{overflow-x:auto;max-width:100%}html.occ-safari .cmdcard{max-width:100%;overflow-x:auto}'; document.head.appendChild(st); document.documentElement.classList.add('occ-safari'); }catch(e){} }
+  var zoomApply=function(){ var m=zoomGet(), z=m==='auto'?(isSafari?100:fitZoom()):m; try{ document.documentElement.style.zoom=(isSafari&&z===100)?'':z+'%'; }catch(e){}
     var b=document.getElementById('occ_zoombtn'); if(b){ b.textContent='🔍 '+(m==='auto'?'auto '+z+'%':z+'%'); b.title='Page size: '+(m==='auto'?'automatic fit, now '+z+'%':z+'%')+'. Click to cycle Auto → 100 → 90 → 80 → 75 → Auto.'; } };
   var zoomMount=function(){ try{ if(document.getElementById('occ_zoombtn')) return zoomApply(); var sm=document.getElementById('simplemode'); if(!sm||!sm.parentNode) return zoomApply(); var b=document.createElement('button'); b.id='occ_zoombtn'; sm.parentNode.insertBefore(b,sm); zoomApply(); }catch(e){} };
   document.addEventListener('click',function(e){ if(e.target&&e.target.id==='occ_zoombtn'){ var m=zoomGet(), nx=m==='auto'?'100':m>=100?'90':m>=90?'80':m>=80?'75':'auto'; try{ localStorage.setItem('occ_zoom',nx); }catch(x){} zoomApply(); } });

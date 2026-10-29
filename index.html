@@ -36708,7 +36708,9 @@ function dayPnl(t){
    waiting, or the risk per trade when nothing is) — a $10M paper balance must not make the lockout unreachable */
 function dayLossLimit(t, bal, pct){
   const all = (t.open || []).concat(t.pending || []).filter(p => +p.sl > 0).map(p => posNotional(p) * stopFrac(p)).filter(v => v > 0).sort((a, b) => a - b);
-  const med = all.length ? all[Math.floor(all.length / 2)] : (typeof riskPerTrade === 'function' ? riskPerTrade() : 100);
+  /* never below the risk per trade (2026-10-30: with stops off, only breakeven-locked stops of $1–4 were left, so the limit
+     became 25 × $4 = $100 and the lockout fired on ordinary noise) */
+  const rpt = (typeof riskPerTrade === 'function' ? riskPerTrade() : 100), med0 = all.length ? all[Math.floor(all.length / 2)] : rpt, med = Math.max(med0, rpt);
   const byPct = Math.max(0, bal) * pct / 100, byStops = 25 * med;
   return byStops < byPct ? { lim: -byStops, bound: '25 typical stops (' + Math.round(med) + ' each)' } : { lim: -byPct, bound: pct + '% of balance' };
 }
@@ -36869,7 +36871,7 @@ function riskRefuse(t, bal, dir, notional, sym, skipId, tag){
      to be ALLOWED, which let any trade through while the figure was missing. */
   if (!(bal > 0)){ const pb = paperBalOf(t); if (pb > 0) bal = pb; else return 'account balance unknown — no new entries until it can be read (exits keep working)'; }
   const b = riskBook(tt, bal, skipId), M = v => (v < 0 ? '−$' : '$') + Math.abs(Math.round(v)).toLocaleString();
-  if (b.cfg.dayLossPct > 0){
+  if (b.cfg.dayLossPct > 0 && !/^occ-hedge\|/.test(String(tag || ''))){   /* a hedge cuts risk — the lockout never refuses it (2026-10-30: HYPE's hedge was refused while it ran to liquidation) */
     const dp = dayPnl(t), DL = dayLossLimit(t, bal, b.cfg.dayLossPct), lim = DL.lim;
     if (dp <= lim){
       try{ if (window.__occNotify) window.__occNotify('daily loss lockout', 'Closed P&L today is ' + M(dp) + ' — no new entries until midnight.', 'lockout-' + occDayKey()); }catch(e){}

@@ -5,6 +5,16 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>OCC Toolkit Power v4</title>
 <script>
+/* ---- Take-profit rungs that never repeat (2026-10-30, "some TPs are the same — TP2 same as 3, 4, 5") ----
+   Rung k sits k × base from entry (base = step target ÷ original size). When that would pass the cap, the rungs used to
+   pile up AT the cap (TP2…TP5 one price). Now TP1 keeps its distance and the rest are spread evenly from TP1 to the cap,
+   so every step is its own price. Shared by the fill engine, the table and the next-step label. */
+window.__tpRung = function(k, parts, base, cap){
+  if (!(base > 0)) return 0; parts = Math.max(1, parts | 0);
+  if (parts * base <= cap) return k * base;
+  const d1 = Math.min(base, cap); if (parts === 1 || k <= 1) return d1;
+  return d1 + (cap - d1) * (k - 1) / (parts - 1);
+};
 /* ---- One chime per alert (2026-10-26, "there is duplicated music in the tool's sound") ----
    The toolkit plays no audio itself; every sound is the system chime of a desktop notification. The same event could raise
    two notifications (two detectors, or one re-checked a few seconds later), and each chimed. Every notification now carries
@@ -17248,7 +17258,7 @@ function feApply(t, sym, bars, span, live, notes) {
           /* and no step further than TP_MAX_PCT from entry: a target the market rarely reaches is not a target */
           /* rung k sits k × (target ÷ ORIGINAL size) from entry — 1, 2, 3, 4, 5% for $50 on $5,000 — never past TP_MAX_PCT
              (2026-10-23: the figure on what was left made the rungs geometric, TP5 five times TP1's distance and more) */
-          const banked = pos.tpBanked || 0, remN = pos.notional, dk = Math.min(TP_MAX_PCT / 100, k * _cash / (pos.n0 || remN));
+          const banked = pos.tpBanked || 0, remN = pos.notional, dk = window.__tpRung(k, _parts, _cash / (pos.n0 || remN), TP_MAX_PCT / 100);
           const rung = L ? pos.entry * (1 + dk) : pos.entry * (1 - dk);
           if (L ? hi >= rung : lo <= rung) {
             const px = rung;
@@ -21417,7 +21427,7 @@ function tradeView(){
               if(parts>1){ /* compact (2026-10-03 02:30, "no button to close any order" — five lines here pushed the Close button off the screen):
                   the NEXT step on one line, the whole ladder in its tooltip */
                 const n0=x.n0||x.notional, done=x.tpDone||0, all=[], nextK=Math.min(parts,done+1); let nextPx=null;
-                for(let k=1;k<=parts;k++){ const remN=n0-(k-1)*n0/parts, d=Math.min(k*ct/n0,TP_MAX_PCT/100), px=L?x.entry*(1+d):x.entry*(1-d); all.push('TP'+k+' '+price(px)+(k<=done?' ✓':'')); if(k===nextK) nextPx=px; }
+                for(let k=1;k<=parts;k++){ const remN=n0-(k-1)*n0/parts, d=window.__tpRung(k,parts,ct/n0,TP_MAX_PCT/100), px=L?x.entry*(1+d):x.entry*(1-d); all.push('TP'+k+' '+price(px)+(k<=done?' ✓':'')); if(k===nextK) nextPx=px; }
                 /* all five written out again (02:47, "TP1 to 5 not clear"): small lines, taken steps struck through, the next one bold;
                    the page's automatic fit keeps the Close button on screen */
                 ladder='<span style="display:inline-block;text-align:right;font-size:9.5px;line-height:1.3" title="'+Math.round(100/parts)+'% of the position (and of its margin) closes at each step: +$'+Math.round(ct)+' on what is still open">'
@@ -36442,7 +36452,7 @@ function cashNextFor(p){
   const parts=(typeof cashParts==='function')?cashParts():1;
   if(parts<2) return {step:0, need:T, last:true, parts:1};
   const k=(p.tpDone||0)+1; if(k>parts) return null;
-  const d=Math.min(TP_MAX_PCT/100, k*T/(p.n0||p.notional));   /* rung k at k × T ÷ original size from entry (as the fill engine) */
+  const d=window.__tpRung(k, parts, T/(p.n0||p.notional), TP_MAX_PCT/100);   /* rung k at k × T ÷ original size from entry (as the fill engine) */
   return {step:k, need:d*p.notional, last:k===parts, parts:parts};
 }
 /* ---- One idea, one position ------------------------------------------------
@@ -37435,7 +37445,7 @@ function occSelfTest(){
       for(var iR=1;iR<=30;iR++){ pxR*=0.99; barsR.push({t:iR,o:pxR*1.004,h:pxR*1.005,l:pxR,c:pxR}); }
       window.__feApply(acR,TS,barsR,60000,false,[]);
       var exR=acR.closed.map(function(x){return x.exit}).reverse();
-      ok('ladder rungs: +6% then capped at 8% from entry (never −75%)', exR.length===5&&Math.abs(exR[0]-94)<1e-6&&exR.slice(1).every(function(v){return Math.abs(v-92)<1e-6}), exR.map(function(v){return v.toFixed(2)}).join(' '));
+      ok('ladder rungs: TP1 at 6%, the rest spread to the 8% cap — five different prices', exR.length===5&&[94,93.5,93,92.5,92].every(function(v,i){return Math.abs(exR[i]-v)<1e-6}), exR.map(function(v){return v.toFixed(2)}).join(' '));
       localStorage.setItem('occ_cash_tp','0'); localStorage.setItem('occ_cash_tp_parts','1');
     }
     /* 5a5 · risk per trade sizes the stop; a stop past liquidation is refused */

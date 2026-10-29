@@ -6001,8 +6001,15 @@ async function sgRun(){
    Each row now uses the live mark when it is under 60 s old, keeps the candle close as pxClose, and the table re-draws
    every 15 s with the fresh mark. */
 let SG_RAW = null;
+/* a level is a buy entry only while it is BELOW the price now; once price falls through it, it is overhead — a sell level
+   (2026-10-30, "buy entries higher than the market": BTC's 80,671 / 79,797 / 79,218 stayed under BUY at 78,997, and Auto-place
+   would have rested a buy-STOP above the market). Both lists are re-split on the live price, nearest first, three each. */
+function sgSplit(r, px){ const all = [], seen = new Set();
+  (r.buys || []).concat(r.sells || []).forEach(z => { if (z && z.px > 0 && !seen.has(z.px)){ seen.add(z.px); all.push(z); } });
+  const buys = all.filter(z => z.px < px).sort((a, b) => b.px - a.px).slice(0, 3), sells = all.filter(z => z.px > px).sort((a, b) => a.px - b.px).slice(0, 3);
+  return { buys, sells, sup: buys[0] ? buys[0].px : null, res: sells[0] ? sells[0].px : null }; }
 function sgLive(r){ try{ const m = window.__markOf ? window.__markOf(r.sym) : null, at = window.__markAt ? window.__markAt(r.sym) : 0;
-  return (m > 0 && at && Date.now() - at < 60000) ? Object.assign({}, r, { px: m, pxClose: r.px, live: true }) : r; }catch(e){ return r; } }
+  return (m > 0 && at && Date.now() - at < 60000) ? Object.assign({}, r, { px: m, pxClose: r.px, live: true }, sgSplit(r, m)) : r; }catch(e){ return r; } }
 setInterval(() => { try{ const b = $('sgBox'); if (!SG_RAW || !b || document.hidden || !b.offsetParent) return; sgRenderRows(SG_RAW, false); }catch(e){} }, 15000);
 function sgRenderRows(rows, done){
   SG_RAW = rows; rows = rows.map(sgLive);
@@ -6330,7 +6337,7 @@ async function sgFreshen(){
   SG_ROWS.forEach(r => {
     const p = px[r.sym];
     if (!(p > 0) || p === r.px) return;
-    r.px = p; moved++;
+    r.px = p; Object.assign(r, sgSplit(r, p)); moved++;
   });
   if (!moved) return {skipped:'no price changed', got:Object.keys(px).length};
   SG_PXAT = Date.now();
